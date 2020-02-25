@@ -6,16 +6,20 @@ import ai.labs.runtime.bootstrap.AbstractBaseModule;
 import ai.labs.server.IServerRuntime;
 import ai.labs.server.MongoLoginService;
 import ai.labs.server.ServerRuntime;
+import ai.labs.server.providers.CorsBasicAuthenticator;
 import ai.labs.user.IUserStore;
 import ai.labs.user.model.User;
+import ai.labs.utilities.RuntimeUtilities;
 import ai.labs.utilities.StringUtilities;
 import com.google.inject.Provider;
 import com.google.inject.Provides;
+import com.google.inject.Scopes;
+import io.micrometer.core.instrument.MeterRegistry;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.eclipse.jetty.security.ConstraintMapping;
 import org.eclipse.jetty.security.ConstraintSecurityHandler;
 import org.eclipse.jetty.security.LoginService;
 import org.eclipse.jetty.security.SecurityHandler;
-import org.eclipse.jetty.security.authentication.BasicAuthenticator;
 import org.eclipse.jetty.util.security.Constraint;
 import org.jboss.resteasy.plugins.guice.GuiceResteasyBootstrapServletContextListener;
 import org.jboss.resteasy.plugins.server.servlet.HttpServletDispatcher;
@@ -36,6 +40,7 @@ import static ai.labs.utilities.SecurityUtilities.generateSalt;
 public class ServerRuntimeModule extends AbstractBaseModule {
     private static final String AUTHENTICATION_BASIC_AUTH = "basic";
     private static final String AUTHENTICATION_KEYCLOAK = "keycloak";
+    private static final String HTTP_METHOD_OPTIONS = "OPTIONS";
 
     public ServerRuntimeModule(InputStream... configFile) {
         super(configFile);
@@ -44,7 +49,7 @@ public class ServerRuntimeModule extends AbstractBaseModule {
     @Override
     protected void configure() {
         registerConfigFiles(configFiles);
-        bind(LoginService.class).to(MongoLoginService.class);
+        bind(LoginService.class).to(MongoLoginService.class).in(Scopes.SINGLETON);
     }
 
     @Provides
@@ -71,7 +76,8 @@ public class ServerRuntimeModule extends AbstractBaseModule {
                                                ThreadPoolExecutor threadPoolExecutor,
                                                HttpServletDispatcher httpServletDispatcher,
                                                MongoLoginService mongoLoginService,
-                                               AdapterConfig keycloakAdapterConfig)
+                                               AdapterConfig keycloakAdapterConfig,
+                                               MeterRegistry meterRegistry)
             throws ClassNotFoundException {
 
         ServerRuntime.Options options = new ServerRuntime.Options();
@@ -100,7 +106,7 @@ public class ServerRuntimeModule extends AbstractBaseModule {
         }
 
         return new ServerRuntime(options, contextListener, swaggerContextListener, httpServletDispatcher,
-                securityHandler, threadPoolExecutor, mongoLoginService, keycloakAdapterConfig, environment, resourceDir);
+                securityHandler, threadPoolExecutor, mongoLoginService, keycloakAdapterConfig, meterRegistry, environment, resourceDir);
     }
 
     @Provides
@@ -111,12 +117,16 @@ public class ServerRuntimeModule extends AbstractBaseModule {
                                                                    IUserStore userStore) throws IResourceStore.ResourceStoreException {
         var securityHandler = new BasicSecurityHandler();
         setupSecurityHandler(securityHandler, publicAccessPaths, "admin", "user");
-        securityHandler.setAuthenticator(new BasicAuthenticator());
+        securityHandler.setAuthenticator(new CorsBasicAuthenticator());
 
         try {
             userStore.searchUser(defaultUsername);
         } catch (IResourceStore.ResourceNotFoundException e) {
             if (userStore.getUsersCount() == 0) {
+                if (RuntimeUtilities.isNullOrEmpty(defaultPassword)) {
+                    defaultPassword = RandomStringUtils.randomAlphanumeric(8);
+                }
+
                 userStore.createUser(
                         new User(defaultUsername, defaultPassword, generateSalt(), "", "EDDI"));
 
@@ -186,6 +196,7 @@ public class ServerRuntimeModule extends AbstractBaseModule {
         // expect those paths given in webServer.publicAccessPaths , separated by ";"
         constraint = new Constraint();
         constraint.setAuthenticate(false);
+        constraint.setRoles(new String[]{admin, user});
 
         for (String path : publicAccessPaths.split(";")) {
             mapping = new ConstraintMapping();
@@ -193,6 +204,16 @@ public class ServerRuntimeModule extends AbstractBaseModule {
             mapping.setPathSpec(path.trim());
             securityHandler.addConstraintMapping(mapping);
         }
+
+        // exclude OPTIONS method from authentication
+        constraint = new Constraint();
+        constraint.setAuthenticate(false);
+        constraint.setRoles(new String[]{admin, user});
+        mapping = new ConstraintMapping();
+        mapping.setMethod(HTTP_METHOD_OPTIONS);
+        mapping.setConstraint(constraint);
+        mapping.setPathSpec("/*");
+        securityHandler.addConstraintMapping(mapping);
     }
 
     private static class BasicSecurityHandler extends ConstraintSecurityHandler {

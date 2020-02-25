@@ -4,11 +4,16 @@ import ai.labs.memory.model.ConversationOutput;
 import ai.labs.models.Context;
 import lombok.extern.slf4j.Slf4j;
 
-import java.util.*;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
 
 import static ai.labs.memory.ConversationMemoryUtilities.prepareContext;
 import static ai.labs.memory.IConversationMemory.IConversationStep;
 import static ai.labs.memory.IConversationMemory.IWritableConversationStep;
+import static ai.labs.utilities.RuntimeUtilities.isNullOrEmpty;
 
 @Slf4j
 public class MemoryItemConverter implements IMemoryItemConverter {
@@ -18,6 +23,8 @@ public class MemoryItemConverter implements IMemoryItemConverter {
     private static final String KEY_LAST = "last";
     private static final String KEY_PAST = "past";
     private static final String KEY_PROPERTIES = "properties";
+    private static final String KEY_USER_INFO = "userInfo";
+    private static final String KEY_USER_ID = "userId";
 
     @Override
     public Map<String, Object> convert(IConversationMemory memory) {
@@ -25,6 +32,11 @@ public class MemoryItemConverter implements IMemoryItemConverter {
         List<IData<Context>> contextDataList = memory.getCurrentStep().getAllData(KEY_CONTEXT);
         var contextMap = prepareContext(contextDataList);
         var memoryMap = convertMemoryItems(memory);
+        var userId = memory.getUserId();
+        if (!isNullOrEmpty(userId)) {
+            ret.put(KEY_USER_INFO, Map.of(KEY_USER_ID, userId));
+        }
+
         var conversationProperties = memory.getConversationProperties();
 
         if (!contextMap.isEmpty()) {

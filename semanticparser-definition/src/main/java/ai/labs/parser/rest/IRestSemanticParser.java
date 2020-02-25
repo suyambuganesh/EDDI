@@ -1,9 +1,18 @@
 package ai.labs.parser.rest;
 
 import ai.labs.parser.rest.model.Solution;
-import io.swagger.annotations.*;
+import io.swagger.annotations.Api;
+import io.swagger.annotations.ApiOperation;
+import io.swagger.annotations.ApiParam;
+import io.swagger.annotations.ApiResponse;
+import io.swagger.annotations.ApiResponses;
+import io.swagger.annotations.Authorization;
 
-import javax.ws.rs.*;
+import javax.ws.rs.POST;
+import javax.ws.rs.Path;
+import javax.ws.rs.PathParam;
+import javax.ws.rs.Produces;
+import javax.ws.rs.QueryParam;
 import javax.ws.rs.container.AsyncResponse;
 import javax.ws.rs.container.Suspended;
 import javax.ws.rs.core.MediaType;
@@ -12,7 +21,8 @@ import javax.ws.rs.core.MediaType;
  * @author ginccc
  */
 
-@Api(value = "Configurations -> Endpoint Parser Only")
+@Api(value = "Configurations -> Endpoint Parser Only", authorizations = {@Authorization(value = "eddi_auth")})
+
 @Path("/parser")
 public interface IRestSemanticParser {
 

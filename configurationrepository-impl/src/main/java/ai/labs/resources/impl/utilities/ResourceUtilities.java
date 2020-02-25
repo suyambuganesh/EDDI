@@ -1,10 +1,12 @@
 package ai.labs.resources.impl.utilities;
 
+import ai.labs.memory.descriptor.model.ConversationDescriptor;
 import ai.labs.models.DocumentDescriptor;
 import ai.labs.persistence.IResourceStore;
 import ai.labs.persistence.IResourceStore.IResourceId;
 import ai.labs.resources.rest.documentdescriptor.IDocumentDescriptorStore;
 import ai.labs.utilities.RestUtilities;
+import ai.labs.utilities.URIUtilities;
 import com.mongodb.client.FindIterable;
 import com.mongodb.client.MongoCollection;
 import org.bson.Document;
@@ -14,6 +16,7 @@ import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 import java.net.URI;
 import java.util.Comparator;
+import java.util.Date;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -24,6 +27,7 @@ import static javax.ws.rs.core.Response.Status.BAD_REQUEST;
 public class ResourceUtilities {
     private static final String MONGO_OBJECT_ID = "_id";
     private static final String MONGO_OBJECT_VERSION = "_version";
+    private static final String COPY_APPENDIX = " - Copy";
 
     public static List<IResourceId> getAllConfigsContainingResources(Document filter,
                                                                      MongoCollection<Document> currentCollection,
@@ -98,5 +102,59 @@ public class ResourceUtilities {
         }
 
         return null;
+    }
+
+    public static void createDocumentDescriptorForDuplicate(IDocumentDescriptorStore documentDescriptorStore,
+                                                            String oldId,
+                                                            Integer oldVersion,
+                                                            URI newResourceLocation)
+            throws IResourceStore.ResourceStoreException, IResourceStore.ResourceNotFoundException {
+
+        var oldDescriptor = documentDescriptorStore.readDescriptor(oldId, oldVersion);
+
+        var newResourceId = URIUtilities.extractResourceId(newResourceLocation);
+
+        if (!isNullOrEmpty(oldDescriptor.getName())) {
+            oldDescriptor.setName(oldDescriptor.getName() + COPY_APPENDIX);
+        }
+
+        oldDescriptor.setResource(newResourceLocation);
+        Date currentTime = new Date(System.currentTimeMillis());
+        oldDescriptor.setCreatedOn(currentTime);
+        oldDescriptor.setLastModifiedOn(currentTime);
+
+        documentDescriptorStore.createDescriptor(
+                newResourceId.getId(),
+                newResourceId.getVersion(),
+                oldDescriptor);
+
+    }
+
+    public static DocumentDescriptor createDocumentDescriptor(URI resource, URI author) {
+        Date current = new Date(System.currentTimeMillis());
+
+        DocumentDescriptor descriptor = new DocumentDescriptor();
+        descriptor.setResource(resource);
+        descriptor.setName("");
+        descriptor.setDescription("");
+        descriptor.setCreatedBy(author);
+        descriptor.setCreatedOn(current);
+        descriptor.setLastModifiedOn(current);
+        descriptor.setLastModifiedBy(author);
+
+        return descriptor;
+    }
+
+    public static ConversationDescriptor createConversationDescriptor(URI resource, URI botResourceURI, URI user) {
+        ConversationDescriptor conversationDescriptor = new ConversationDescriptor();
+        conversationDescriptor.setResource(resource);
+        conversationDescriptor.setBotResource(botResourceURI);
+        Date createdOn = new Date(System.currentTimeMillis());
+        conversationDescriptor.setCreatedOn(createdOn);
+        conversationDescriptor.setLastModifiedOn(createdOn);
+        conversationDescriptor.setCreatedBy(user);
+        conversationDescriptor.setLastModifiedBy(user);
+        conversationDescriptor.setViewState(ConversationDescriptor.ViewState.UNSEEN);
+        return conversationDescriptor;
     }
 }

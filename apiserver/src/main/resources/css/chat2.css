@@ -96,7 +96,7 @@ a:active {
     width: 800px;
     max-height: 70%;
     max-width: 70%;
-    transform: translate (-50%, -50%);
+    transform: translate(-50%, -50%);
     background-color: rgba(17, 59, 146, 0.82);
     border-radius: 20px;
     box-shadow: 0 2px 32px 0 rgba(36, 92, 128, 0.89);
@@ -160,6 +160,15 @@ a:active {
     display: inline-block;
     margin: 0 0 16px 0;
     background-color: rgba(213, 232, 255, 0.35);
+}
+
+.botIcon {
+    height: 90px;
+    width: 90px;
+    border-radius: 10%;
+    padding: 10px;
+    display: inline-block;
+    margin: 0;
 }
 
 #menu {
@@ -239,7 +248,6 @@ a:active {
     max-width: 700px;
     padding: 10px;
     height: auto;
-    border-radius: 2px;
     margin-bottom: 32px;
     display: block;
     background-color: rgba(213, 232, 255, 0.35);
@@ -302,7 +310,7 @@ a:active {
     position: fixed;
     top: 40%;
     left: 40%;
-    transform: translate (-50%, -50%);
+    transform: translate(-50%, -50%);
     width: 160px;
     display: flex;
 }
@@ -311,7 +319,7 @@ a:active {
     width: 20px;
     height: 120px;
     background: #ffffff;
-    margin: 0px 4px;
+    margin: 0 4px;
     animation: loading 1200ms ease-in-out infinite;
 }
 
@@ -413,6 +421,12 @@ a:active {
     transition: width .2s ease-out, padding-top .2s ease-out;
 }
 
+.message ul,
+ .message ol {
+    text-indent: 5px;
+    margin-left: 18px;
+}
+
 @keyframes loading {
     0%, 60%, 100% {
         transform: scaleY(0.01);
@@ -507,6 +521,14 @@ a:active {
         background-color: rgba(213, 232, 255, 0.35);
     }
 
+    .botIcon {
+        height: 45px;
+        width: 45px;
+        border-radius: 10%;
+        padding: 10px;
+        display: inline-block;
+        margin: 0;
+    }
 
     .noJS {
         position: fixed;
@@ -516,7 +538,7 @@ a:active {
         width: 450px;
         max-height: 70%;
         max-width: 70%;
-        transform: translate (-50%, -50%);
+        transform: translate(-50%, -50%);
         background-color: rgba(17, 59, 146, 0.82);
         border-radius: 20px;
         box-shadow: 0 1px 16px 0 rgba(36, 92, 128, 0.89);
@@ -538,7 +560,7 @@ a:active {
         position: fixed;
         top: 40%;
         left: 40%;
-        transform: translate (-50%, -50%);
+        transform: translate(-50%, -50%);
         width: 80px;
         display: flex;
     }

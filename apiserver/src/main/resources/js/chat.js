@@ -30,9 +30,10 @@ class Message {
 }
 
 class InputField {
-    constructor(placeholder, defaultValue) {
+    constructor(placeholder, defaultValue, isPassword) {
         this.placeholder = typeof placeholder !== 'undefined' ? placeholder : 'Type your response…';
         this.defaultValue = typeof defaultValue !== 'undefined' ? defaultValue : '';
+        this.isPassword = typeof isPassword !== 'undefined' ? isPassword : false;
         this.element = $('<div>');
     }
 
@@ -40,7 +41,7 @@ class InputField {
         return function () {
             this.element = $('<div>');
             this.element.addClass('line textInputContainer');
-            const $inputField = $('<input type="text" name="answer" required="required" autocomplete="off" autofocus="autofocus">');
+            const $inputField = $('<input type="' + (this.isPassword ? 'password' : 'text') + '" name="answer" required="required" autocomplete="off" autofocus="autofocus">');
             if (this.placeholder !== '') {
                 $inputField.attr('placeholder', this.placeholder);
             }
@@ -61,7 +62,11 @@ class InputField {
 
                         if (answer !== "") {
                             _this.remove();
-                            createAnswerMessage(answer);
+                            if (_this.isPassword) {
+                                createAnswerMessage('*****');
+                            } else {
+                                createAnswerMessage(answer);
+                            }
                             eddi.submitUserMessage(answer);
                         } else {
                             $(this).removeClass('shake').removeClass('fadeInUp');
@@ -158,8 +163,9 @@ class Button {
 
 
 class QuickReply {
-    constructor(text) {
+    constructor(text, shakeDelay) {
         this.text = text;
+        this.shakeDelay = shakeDelay;
     }
 
     get draw() {
@@ -179,7 +185,12 @@ class QuickReply {
             $quickReply.addClass('quick_reply');
             $('#chat-container').append($quickReply);
             $quickReply.fadeIn({queue: false, duration: 1500});
+            let shakeDelay = this.shakeDelay;
             return setTimeout(function () {
+                setTimeout(function () {
+                    $quickReply.effect('shake', {times: 2}, 300);
+                }, shakeDelay);
+
                 return $quickReply.addClass('appeared');
             }, 0);
         };
@@ -187,15 +198,11 @@ class QuickReply {
 }
 
 class ConversationEnd {
-    constructor(infoMessage) {
-        this.infoMessage = infoMessage;
-    }
-
     get draw() {
         return function () {
             this.element = $('<div style="margin: 1em;">');
             this.element.addClass('line');
-            const $message = $('<div style="color:darkgray;">*** ' + this.infoMessage + ' ***</div>');
+            const $message = $('<div style="color:darkgray;">*** CONVERSATION ENDED ***</div>');
             this.element.append($message);
             $message.html(this.text);
             $('#chat-container').append(this.element);
@@ -223,12 +230,20 @@ $(function () {
 
     eddi.submitUserMessage = function (userMessage, context) {
         let requestBody = null;
+
+        if (typeof context === 'undefined') {
+            context = {};
+        }
+
+        context.url = {'type': 'object', 'value': $.url.parse(window.location.href)};
+
         let contextValue = $('#contextValue').val().trim();
         if (contextValue !== null && contextValue !== '') {
             let contextObj = JSON.parse(contextValue);
             if (typeof context !== 'undefined') {
                 Object.assign(contextObj, context);
             }
+
             requestBody = {
                 input: userMessage,
                 context: contextObj
@@ -279,9 +294,10 @@ $(function () {
         /** @namespace conversationMemory.conversationOutputs */
         /** @namespace conversationOutput.quickReplies */
         let conversationOutput = conversationMemory.conversationOutputs[0];
+        let actions = conversationOutput.actions ? conversationOutput.actions : [];
         let outputArray = conversationOutput.output ? conversationOutput.output : [];
         let quickReplyArray = conversationOutput.quickReplies ? conversationOutput.quickReplies : [];
-        createMessage(outputArray, quickReplyArray, conversationState === 'ENDED');
+        createMessage(outputArray, quickReplyArray, conversationState === 'ENDED', actions.includes("DISABLE_INPUT"));
     };
 
     const deployBot = function (environment, botId, botVersion) {
@@ -310,7 +326,6 @@ $(function () {
             const conversationUriArray = xhr.getResponseHeader('Location').split('/');
 
             if (!eddi.isFirstMessage) {
-                new ConversationEnd('NEW CONVERSATION STARTED').draw();
                 smoothScrolling();
                 eddi.isFirstMessage = false;
             }
@@ -354,15 +369,26 @@ $(function () {
         let botId = null;
         let conversationId = null;
         let botVersion = null;
+        let skipDelay = null;
 
         environment = typeof parts[2] !== 'undefined' ? decodeURIComponent(parts[2]) : environment;
         botId = typeof parts[3] !== 'undefined' ? decodeURIComponent(parts[3]) : botId;
         conversationId = typeof parts[4] !== 'undefined' ? decodeURIComponent(parts[4]) : conversationId;
-        if (query.params && query.params.version) {
-            botVersion = query.params.version;
+
+        if (query.params) {
+            if (query.params.version) {
+                botVersion = query.params.version;
+            }
+
+            if (query.params.skipDelay) {
+                skipDelay = query.params.skipDelay;
+            }
         }
 
-        return {conversationId: conversationId, environment: environment, botId: botId, botVersion: botVersion};
+        return {
+            conversationId: conversationId, environment: environment,
+            botId: botId, botVersion: botVersion, skipDelay: skipDelay
+        };
     };
 
     const proceedConversation = function () {
@@ -375,26 +401,30 @@ $(function () {
 
     const checkBotDeployment = function () {
         //check if bot is deployed
-        $.get('/administration/' + eddi.environment + '/deploymentstatus/' + eddi.botId + '?version=' + eddi.botVersion)
-            .done(function (data) {
-                if (data === 'NOT_FOUND') {
-                    if (confirm('Bot is not deployed at the moment.. Deploy latest version NOW?')) {
-                        deployBot(eddi.environment, eddi.botId, eddi.botVersion);
+        if (eddi.environment === 'test') {
+            $.get('/administration/' + eddi.environment + '/deploymentstatus/' + eddi.botId + '?version=' + eddi.botVersion)
+                .done(function (data) {
+                    if (data === 'NOT_FOUND') {
+                        if (confirm('Bot is not deployed at the moment.. Deploy latest version NOW?')) {
+                            deployBot(eddi.environment, eddi.botId, eddi.botVersion);
+                        }
                     }
-                }
 
-                if (data === 'ERROR') {
-                    alert('Bot encountered an server error :-(');
-                }
+                    if (data === 'ERROR') {
+                        alert('Bot encountered an server error :-(');
+                    }
 
-                if (data === 'IN_PROGRESS') {
-                    alert('Bot is still warming up...');
-                }
+                    if (data === 'IN_PROGRESS') {
+                        alert('Bot is still warming up...');
+                    }
 
-                if (data === 'READY') {
-                    proceedConversation();
-                }
-            });
+                    if (data === 'READY') {
+                        proceedConversation();
+                    }
+                });
+        } else {
+            proceedConversation();
+        }
     };
 
     eddi.insertContextExample = function () {
@@ -439,14 +469,24 @@ $(function () {
         }
 
         //extract conversationId
+        if (extractedParams.skipDelay !== null) {
+            eddi.skipDelay = extractedParams.skipDelay;
+            $('#skipDelay').prop('checked', eddi.skipDelay);
+        }
+
+        //extract conversationId
         if (extractedParams.botVersion !== null) {
             eddi.botVersion = extractedParams.botVersion;
             checkBotDeployment();
         } else {
-            $.get('/botstore/bots/' + eddi.botId + '/currentversion', function (data) {
-                eddi.botVersion = data;
-                checkBotDeployment();
-            });
+            if (eddi.environment === 'test') {
+                $.get('/botstore/bots/' + eddi.botId + '/currentversion', function (data) {
+                    eddi.botVersion = data;
+                    checkBotDeployment();
+                });
+            } else {
+                proceedConversation();
+            }
         }
     });
 });

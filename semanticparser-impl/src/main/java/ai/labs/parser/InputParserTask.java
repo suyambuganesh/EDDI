@@ -1,12 +1,14 @@
 package ai.labs.parser;
 
 import ai.labs.expressions.Expression;
+import ai.labs.expressions.Expressions;
 import ai.labs.expressions.utilities.IExpressionProvider;
 import ai.labs.lifecycle.ILifecycleTask;
 import ai.labs.lifecycle.IllegalExtensionConfigurationException;
 import ai.labs.lifecycle.UnrecognizedExtensionException;
 import ai.labs.memory.IConversationMemory;
 import ai.labs.memory.IData;
+import ai.labs.memory.model.ConversationOutput;
 import ai.labs.memory.model.Data;
 import ai.labs.output.model.QuickReply;
 import ai.labs.parser.extensions.corrections.ICorrection;
@@ -20,7 +22,6 @@ import ai.labs.parser.internal.matches.RawSolution;
 import ai.labs.parser.rest.model.Solution;
 import ai.labs.resources.rest.extensions.model.ExtensionDescriptor;
 import ai.labs.utilities.RuntimeUtilities;
-import ai.labs.utilities.StringUtilities;
 import lombok.extern.slf4j.Slf4j;
 
 import javax.inject.Inject;
@@ -33,6 +34,7 @@ import static ai.labs.parser.DictionaryUtilities.convertQuickReplies;
 import static ai.labs.parser.DictionaryUtilities.extractExpressions;
 import static ai.labs.resources.rest.extensions.model.ExtensionDescriptor.ConfigValue;
 import static ai.labs.resources.rest.extensions.model.ExtensionDescriptor.FieldType.BOOLEAN;
+import static ai.labs.utilities.StringUtilities.joinStrings;
 
 /**
  * @author ginccc
@@ -118,33 +120,28 @@ public class InputParserTask implements ILifecycleTask {
     }
 
     private List<IDictionary> prepareTemporaryDictionaries(IConversationMemory memory) {
-        IConversationMemory.IConversationStepStack previousSteps = memory.getPreviousSteps();
-        List<IDictionary> temporaryDictionaries = Collections.emptyList();
-        if (previousSteps.size() > 0) {
-            List<IData<List<Map<String, String>>>> data = previousSteps.get(0).getAllData("quickReplies");
-            if (data != null) {
-                List<QuickReply> quickReplies = extractQuickReplies(data);
-                temporaryDictionaries = convertQuickReplies(quickReplies, expressionProvider);
-            }
+        List<ConversationOutput> conversationOutputs = memory.getConversationOutputs();
+        if (conversationOutputs.isEmpty() || conversationOutputs.size() < 2) {
+            return Collections.emptyList();
         }
+
+        ConversationOutput conversationOutput = conversationOutputs.get(conversationOutputs.size() - 2);
+        List<IDictionary> temporaryDictionaries = Collections.emptyList();
+        List<Map<String, Object>> quickRepliesOutput = (List<Map<String, Object>>) conversationOutput.get("quickReplies");
+        if (quickRepliesOutput != null) {
+            List<QuickReply> quickReplies = extractQuickReplies(quickRepliesOutput);
+            temporaryDictionaries = convertQuickReplies(quickReplies, expressionProvider);
+        }
+
         return temporaryDictionaries;
     }
 
-    private List<QuickReply> extractQuickReplies(List<IData<List<Map<String, String>>>> quickReplyDataList) {
-        List<QuickReply> ret = new LinkedList<>();
-        quickReplyDataList.stream().
+    private List<QuickReply> extractQuickReplies(List<Map<String, Object>> quickReplyOutputList) {
+        return quickReplyOutputList.stream().
                 filter(Objects::nonNull).
-                filter(IData::isPublic).
-                forEach((quickReplyData) -> {
-                    List<Map<String, String>> resultList = quickReplyData.getResult();
-                    ret.addAll(resultList.stream().
-                            map((resultMap) -> new QuickReply(resultMap.get("value"),
-                                    resultMap.get("expressions"), Boolean.parseBoolean(resultMap.get("isDefault")))).
-                            collect(Collectors.toList()));
-
-                });
-
-        return ret;
+                map((quickReplyData) -> new QuickReply(quickReplyData.get("value").toString(),
+                        quickReplyData.get("expressions").toString(), (Boolean) quickReplyData.get("default"))).
+                collect(Collectors.toList());
     }
 
     private void storeNormalizedResultInMemory(IConversationMemory.IWritableConversationStep currentStep, String normalizedInput) {
@@ -159,20 +156,24 @@ public class InputParserTask implements ILifecycleTask {
         if (!parsedSolutions.isEmpty()) {
             Solution solution = extractExpressions(parsedSolutions, includeUnused, includeUnknown).get(0);
 
-            String expressions = solution.getExpressions();
-            if (appendExpressions && !expressions.isEmpty()) {
+            Expressions newExpressions = solution.getExpressions();
+            if (appendExpressions && !newExpressions.isEmpty()) {
                 IData<String> latestExpressions = currentStep.getLatestData(KEY_EXPRESSIONS_PARSED);
                 if (latestExpressions != null) {
-                    expressions = StringUtilities.joinStrings(", ", latestExpressions.getResult(), expressions);
+                    Expressions currentExpressions = expressionProvider.parseExpressions(latestExpressions.getResult());
+                    currentExpressions.addAll(newExpressions);
+                    newExpressions = currentExpressions.stream().distinct().collect(Collectors.toCollection(Expressions::new));
                 }
 
-                IData<String> expressionsData = new Data<>(KEY_EXPRESSIONS_PARSED, expressions);
+                String expressionString = joinStrings(", ", newExpressions);
+                IData<String> expressionsData = new Data<>(KEY_EXPRESSIONS_PARSED, expressionString);
                 currentStep.storeData(expressionsData);
-                currentStep.addConversationOutputString(KEY_EXPRESSIONS, expressions);
+                currentStep.addConversationOutputString(KEY_EXPRESSIONS, expressionString);
 
-                List<String> intents = expressionProvider.parseExpressions(expressions).stream().
+                List<String> intents = newExpressions.stream().
                         map(Expression::getExpressionName).
-                        collect(Collectors.toList());
+                        distinct().collect(Collectors.toList());
+
                 Data<List<String>> intentData = new Data<>(KEY_INTENT, intents);
                 currentStep.storeData(intentData);
                 currentStep.addConversationOutputList(KEY_INTENT, intents);

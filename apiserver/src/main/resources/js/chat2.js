@@ -51,19 +51,25 @@ function displayQuickReplies(quickReplies) {
     }
 
     let quickReply;
-    for (let i = 0; i < quickReplies.length; i++) {
-        quickReply = new QuickReply(quickReplies[i].value);
+    for (let i = 0, delay = 5000; i < quickReplies.length; i++, delay += 1000) {
+        quickReply = new QuickReply(quickReplies[i].value, delay);
         quickReply.draw();
     }
 
     return true;
 }
 
+function endConversation() {
+    new ConversationEnd().draw();
+    eddi.createConversation(eddi.environment, eddi.botId);
+}
+
 // Recursive function that goes through the set of messages it is given
-function createMessage(outputArray, quickRepliesArray, hasConversationEnded, i) {
+function createMessage(outputArray, quickRepliesArray, hasConversationEnded, disableInput, i) {
     // i is optional - i is the current message in the array the system is displaying
     i = typeof i !== 'undefined' ? i : 0;
 
+    let delay = -1;
     if (outputArray.length > 0) {
         // If this message is not the first, use the previous to calculate a delay, otherwise use a number
         let messageObject = outputArray[i];
@@ -82,6 +88,11 @@ function createMessage(outputArray, quickRepliesArray, hasConversationEnded, i) 
                     message = '<img src="' + messageObject.uri + '" width="100%" alt="image send by the bot" />';
                     preLoadImage(messageObject.uri);
                     break;
+                case 'botIcon':
+                    message = '<img src="' + messageObject.uri + '" class="botIcon" alt="icon of bot" />';
+                    message += '<script>$("#eddiLogo").fadeOut(10);</script>';
+                    preLoadImage(messageObject.uri);
+                    break;
                 case 'textInput':
                     inputField = messageObject;
                     break;
@@ -94,13 +105,15 @@ function createMessage(outputArray, quickRepliesArray, hasConversationEnded, i) 
                 default:
                     console.log('output type is not recognized ' + messageObject.type);
             }
+
+            if (messageObject.delay) {
+                delay = messageObject.delay;
+            }
         }
 
         // delay override - Make first responses quick
-        let delay;
-        if (eddi.skipDelay || message == null || (i === 0 && eddi.isFirstMessage)) {
+        if (eddi.skipDelay || message == null) {
             delay = 50;
-            eddi.isFirstMessage = false;
         } else {
             delay = calculateDelay(message);
         }
@@ -118,7 +131,7 @@ function createMessage(outputArray, quickRepliesArray, hasConversationEnded, i) 
                 msg.draw();
             }
 
-            if (inputField != null) {
+            if (!disableInput && inputField != null) {
                 createAnswerField(inputField);
             }
 
@@ -128,23 +141,28 @@ function createMessage(outputArray, quickRepliesArray, hasConversationEnded, i) 
 
             smoothScrolling();
             if (i + 1 < outputArray.length) {
-                createMessage(outputArray, quickRepliesArray, hasConversationEnded, ++i);
+                createMessage(outputArray, quickRepliesArray, hasConversationEnded, disableInput, ++i);
             } else {
                 if (!hasConversationEnded && !displayQuickReplies(quickRepliesArray)) {
-                    if (inputField == null && button == null) {
+                    if (!disableInput && inputField == null && button == null) {
                         createAnswerField();
                         smoothScrolling();
                     }
                 }
 
                 if (hasConversationEnded) {
-                    new ConversationEnd('CONVERSATION ENDED').draw();
-                    eddi.createConversation(eddi.environment, eddi.botId);
+                    endConversation();
                 }
             }
         }, delay);
     } else {
-        createAnswerField();
+        if (hasConversationEnded) {
+            endConversation();
+        } else {
+            if (!disableInput) {
+                createAnswerField();
+            }
+        }
     }
 }
 
@@ -159,7 +177,7 @@ function createAnswerField(inputField) {
     let inputFieldObj;
 
     if (typeof inputField !== 'undefined') {
-        inputFieldObj = new InputField(inputField.placeholder, inputField.defaultValue);
+        inputFieldObj = new InputField(inputField.placeholder, inputField.defaultValue, inputField.isPassword);
     } else {
         inputFieldObj = new InputField();
     }

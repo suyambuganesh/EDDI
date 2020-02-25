@@ -4,10 +4,12 @@ import ai.labs.memory.IConversationMemoryStore;
 import ai.labs.memory.descriptor.IConversationDescriptorStore;
 import ai.labs.memory.descriptor.model.ConversationDescriptor;
 import ai.labs.memory.model.ConversationMemorySnapshot;
+import ai.labs.memory.model.SimpleConversationMemorySnapshot;
 import ai.labs.memory.rest.IRestConversationStore;
 import ai.labs.models.ConversationState;
 import ai.labs.models.ConversationStatus;
 import ai.labs.persistence.IResourceStore;
+import ai.labs.persistence.model.ResourceId;
 import ai.labs.resources.rest.documentdescriptor.IDocumentDescriptorStore;
 import ai.labs.user.IUserStore;
 import ai.labs.user.model.User;
@@ -25,6 +27,9 @@ import java.net.URI;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.stream.Collectors;
+
+import static ai.labs.memory.ConversationMemoryUtilities.convertSimpleConversationMemory;
+import static ai.labs.utilities.RuntimeUtilities.checkNotNull;
 
 /**
  * @author ginccc
@@ -48,7 +53,9 @@ public class RestConversationStore implements IRestConversationStore {
     }
 
     @Override
-    public List<ConversationDescriptor> readConversationDescriptors(Integer index, Integer limit, String botId, Integer botVersion, ConversationState conversationState, ConversationDescriptor.ViewState viewState) {
+    public List<ConversationDescriptor> readConversationDescriptors(Integer index, Integer limit,
+                                                                    String conversationId, String botId, Integer botVersion,
+                                                                    ConversationState conversationState, ConversationDescriptor.ViewState viewState) {
         try {
             List<ConversationDescriptor> conversationDescriptors;
             List<ConversationDescriptor> retConversationDescriptors = new LinkedList<>();
@@ -67,6 +74,12 @@ public class RestConversationStore implements IRestConversationStore {
                         message += "Ignoring this resource.";
                         log.warn(String.format(message, conversationDescriptor.getResource()));
                         continue;
+                    }
+
+                    if (!RuntimeUtilities.isNullOrEmpty(conversationId)) {
+                        if (!conversationId.equals(memorySnapshot.getConversationId())) {
+                            continue;
+                        }
                     }
 
                     if (!RuntimeUtilities.isNullOrEmpty(botId)) {
@@ -119,8 +132,8 @@ public class RestConversationStore implements IRestConversationStore {
     }
 
     @Override
-    public ConversationMemorySnapshot readConversationLog(String conversationId) {
-        RuntimeUtilities.checkNotNull(conversationId, "conversationId");
+    public ConversationMemorySnapshot readRawConversationLog(String conversationId) {
+        checkNotNull(conversationId, "conversationId");
 
         try {
             return conversationMemoryStore.loadConversationMemorySnapshot(conversationId);
@@ -133,9 +146,28 @@ public class RestConversationStore implements IRestConversationStore {
     }
 
     @Override
+    public SimpleConversationMemorySnapshot readSimpleConversationLog(String conversationId,
+                                                                      Boolean returnDetailed,
+                                                                      Boolean returnCurrentStepOnly,
+                                                                      List<String> returningFields) {
+        checkNotNull(conversationId, "conversationId");
+        checkNotNull(returnDetailed, "returnDetailed");
+        checkNotNull(returnCurrentStepOnly, "returnCurrentStepOnly");
+
+        try {
+            return convertSimpleConversationMemory(conversationMemoryStore.loadConversationMemorySnapshot(conversationId), returnDetailed);
+        } catch (IResourceStore.ResourceStoreException e) {
+            log.error(e.getMessage(), e);
+            throw new InternalServerErrorException(e);
+        } catch (IResourceStore.ResourceNotFoundException e) {
+            throw new NotFoundException(String.format("Conversation (%s) could not be found", conversationId));
+        }
+    }
+
+    @Override
     public void deleteConversationLog(String conversationId, Boolean deletePermanently)
             throws IResourceStore.ResourceStoreException, IResourceStore.ResourceNotFoundException {
-        RuntimeUtilities.checkNotNull(conversationId, "conversationId");
+        checkNotNull(conversationId, "conversationId");
 
         if (deletePermanently) {
             conversationMemoryStore.deleteConversationMemorySnapshot(conversationId);
@@ -151,13 +183,13 @@ public class RestConversationStore implements IRestConversationStore {
                                                            Integer botVersion,
                                                            Integer index,
                                                            Integer limit) {
-        RuntimeUtilities.checkNotNull(botId, "botId");
-        RuntimeUtilities.checkNotNull(botVersion, "botVersion");
+        checkNotNull(botId, "botId");
+        checkNotNull(botVersion, "botVersion");
 
         List<ConversationDescriptor> conversationDescriptors;
         List<ConversationStatus> conversationStatuses = new LinkedList<>();
         do {
-            conversationDescriptors = readConversationDescriptors(index, limit, botId, botVersion,
+            conversationDescriptors = readConversationDescriptors(index, limit, null, botId, botVersion,
                     null, null);
 
             conversationStatuses.addAll(conversationDescriptors.stream().
@@ -166,7 +198,7 @@ public class RestConversationStore implements IRestConversationStore {
                     map(conversationDescriptor -> {
                         ConversationStatus conversationStatus = new ConversationStatus();
                         URI resourceUri = conversationDescriptor.getResource();
-                        URIUtilities.ResourceId resourceId = URIUtilities.extractResourceId(resourceUri);
+                        ResourceId resourceId = URIUtilities.extractResourceId(resourceUri);
                         conversationStatus.setConversationId(resourceId.getId());
                         conversationStatus.setBotId(botId);
                         conversationStatus.setBotVersion(botVersion);

@@ -4,40 +4,53 @@ import ai.labs.backupservice.IRestImportService;
 import ai.labs.backupservice.IZipArchive;
 import ai.labs.models.BotDeploymentStatus;
 import ai.labs.models.DocumentDescriptor;
-import ai.labs.resources.rest.behavior.IRestBehaviorStore;
-import ai.labs.resources.rest.behavior.model.BehaviorConfiguration;
-import ai.labs.resources.rest.bots.IRestBotStore;
-import ai.labs.resources.rest.bots.model.BotConfiguration;
+import ai.labs.resources.rest.config.behavior.IRestBehaviorStore;
+import ai.labs.resources.rest.config.behavior.model.BehaviorConfiguration;
+import ai.labs.resources.rest.config.bots.IRestBotStore;
+import ai.labs.resources.rest.config.bots.model.BotConfiguration;
+import ai.labs.resources.rest.config.http.IRestHttpCallsStore;
+import ai.labs.resources.rest.config.http.model.HttpCallsConfiguration;
+import ai.labs.resources.rest.config.output.IRestOutputStore;
+import ai.labs.resources.rest.config.output.model.OutputConfigurationSet;
+import ai.labs.resources.rest.config.packages.IRestPackageStore;
+import ai.labs.resources.rest.config.packages.model.PackageConfiguration;
+import ai.labs.resources.rest.config.propertysetter.IRestPropertySetterStore;
+import ai.labs.resources.rest.config.propertysetter.model.PropertySetterConfiguration;
+import ai.labs.resources.rest.config.regulardictionary.IRestRegularDictionaryStore;
+import ai.labs.resources.rest.config.regulardictionary.model.RegularDictionaryConfiguration;
 import ai.labs.resources.rest.documentdescriptor.IRestDocumentDescriptorStore;
-import ai.labs.resources.rest.http.IRestHttpCallsStore;
-import ai.labs.resources.rest.http.model.HttpCallsConfiguration;
-import ai.labs.resources.rest.output.IRestOutputStore;
-import ai.labs.resources.rest.output.model.OutputConfigurationSet;
-import ai.labs.resources.rest.packages.IRestPackageStore;
-import ai.labs.resources.rest.packages.model.PackageConfiguration;
 import ai.labs.resources.rest.patch.PatchInstruction;
-import ai.labs.resources.rest.regulardictionary.IRestRegularDictionaryStore;
-import ai.labs.resources.rest.regulardictionary.model.RegularDictionaryConfiguration;
-import ai.labs.rest.rest.IRestBotAdministration;
-import ai.labs.rest.restinterfaces.IRestInterfaceFactory;
-import ai.labs.rest.restinterfaces.RestInterfaceFactory;
+import ai.labs.rest.restinterfaces.IRestBotAdministration;
+import ai.labs.rest.restinterfaces.factory.IRestInterfaceFactory;
+import ai.labs.rest.restinterfaces.factory.RestInterfaceFactory;
 import ai.labs.serialization.IJsonSerialization;
 import ai.labs.utilities.FileUtilities;
 import ai.labs.utilities.RestUtilities;
 import lombok.extern.slf4j.Slf4j;
 
 import javax.inject.Inject;
-import javax.inject.Named;
 import javax.ws.rs.InternalServerErrorException;
 import javax.ws.rs.container.AsyncResponse;
 import javax.ws.rs.container.TimeoutHandler;
 import javax.ws.rs.core.Response;
-import java.io.*;
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileReader;
+import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.*;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Date;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -60,19 +73,16 @@ public class RestImportService extends AbstractBackupService implements IRestImp
     private final IJsonSerialization jsonSerialization;
     private final IRestInterfaceFactory restInterfaceFactory;
     private final IRestBotAdministration restBotAdministration;
-    private final String apiServerURI;
 
     @Inject
     public RestImportService(IZipArchive zipArchive,
                              IJsonSerialization jsonSerialization,
                              IRestInterfaceFactory restInterfaceFactory,
-                             IRestBotAdministration restBotAdministration,
-                             @Named("system.apiServerURI") String apiServerURI) {
+                             IRestBotAdministration restBotAdministration) {
         this.zipArchive = zipArchive;
         this.jsonSerialization = jsonSerialization;
         this.restInterfaceFactory = restInterfaceFactory;
         this.restBotAdministration = restBotAdministration;
-        this.apiServerURI = apiServerURI;
     }
 
     @Override
@@ -115,7 +125,7 @@ public class RestImportService extends AbstractBackupService implements IRestImp
     @Override
     public void importBot(InputStream zippedBotConfigFiles, AsyncResponse response) {
         try {
-            response.setTimeout(60, TimeUnit.SECONDS);
+            if (response != null) response.setTimeout(60, TimeUnit.SECONDS);
             File targetDir = new File(FileUtilities.buildPath(tmpPath.toString(), UUID.randomUUID().toString()));
             importBotZipFile(zippedBotConfigFiles, targetDir, response);
         } catch (IOException e) {
@@ -199,6 +209,15 @@ public class RestImportService extends AbstractBackupService implements IRestImp
                             updateDocumentDescriptor(packagePath, httpCallsUris, newHttpCallsUris);
                             packageFileString = replaceURIs(packageFileString, httpCallsUris, newHttpCallsUris);
 
+                            // ... for property
+                            List<URI> propertyUris = extractResourcesUris(packageFileString, PROPERTY_URI_PATTERN);
+                            List<URI> newPropertyUris = createNewProperties(
+                                    readResources(propertyUris, packagePath,
+                                            PROPERTY_EXT, PropertySetterConfiguration.class));
+
+                            updateDocumentDescriptor(packagePath, propertyUris, newPropertyUris);
+                            packageFileString = replaceURIs(packageFileString, propertyUris, newPropertyUris);
+
                             // ... for output
                             List<URI> outputUris = extractResourcesUris(packageFileString, OUTPUT_URI_PATTERN);
                             List<URI> newOutputUris = createNewOutputs(
@@ -231,6 +250,7 @@ public class RestImportService extends AbstractBackupService implements IRestImp
             throws RestInterfaceFactory.RestInterfaceFactoryException {
         IRestBotStore restPackageStore = getRestResourceStore(IRestBotStore.class);
         Response botResponse = restPackageStore.createBot(botConfiguration);
+        checkIfCreatedResponse(botResponse);
         return botResponse.getLocation();
     }
 
@@ -240,6 +260,7 @@ public class RestImportService extends AbstractBackupService implements IRestImp
                 jsonSerialization.deserialize(packageFileString, PackageConfiguration.class);
         IRestPackageStore restPackageStore = getRestResourceStore(IRestPackageStore.class);
         Response packageResponse = restPackageStore.createPackage(packageConfiguration);
+        checkIfCreatedResponse(packageResponse);
         return packageResponse.getLocation();
     }
 
@@ -248,6 +269,7 @@ public class RestImportService extends AbstractBackupService implements IRestImp
         IRestRegularDictionaryStore restDictionaryStore = getRestResourceStore(IRestRegularDictionaryStore.class);
         return dictionaryConfigurations.stream().map(regularDictionaryConfiguration -> {
             Response dictionaryResponse = restDictionaryStore.createRegularDictionary(regularDictionaryConfiguration);
+            checkIfCreatedResponse(dictionaryResponse);
             return dictionaryResponse.getLocation();
         }).collect(Collectors.toList());
     }
@@ -257,6 +279,7 @@ public class RestImportService extends AbstractBackupService implements IRestImp
         IRestBehaviorStore restBehaviorStore = getRestResourceStore(IRestBehaviorStore.class);
         return behaviorConfigurations.stream().map(behaviorConfiguration -> {
             Response behaviorResponse = restBehaviorStore.createBehaviorRuleSet(behaviorConfiguration);
+            checkIfCreatedResponse(behaviorResponse);
             return behaviorResponse.getLocation();
         }).collect(Collectors.toList());
     }
@@ -266,7 +289,18 @@ public class RestImportService extends AbstractBackupService implements IRestImp
         IRestHttpCallsStore restHttpCallsStore = getRestResourceStore(IRestHttpCallsStore.class);
         return httpCallsConfigurations.stream().map(httpCallsConfiguration -> {
             Response httpCallsResponse = restHttpCallsStore.createHttpCalls(httpCallsConfiguration);
+            checkIfCreatedResponse(httpCallsResponse);
             return httpCallsResponse.getLocation();
+        }).collect(Collectors.toList());
+    }
+
+    private List<URI> createNewProperties(List<PropertySetterConfiguration> propertySetterConfigurations)
+            throws RestInterfaceFactory.RestInterfaceFactoryException {
+        IRestPropertySetterStore restPropertySetterStore = getRestResourceStore(IRestPropertySetterStore.class);
+        return propertySetterConfigurations.stream().map(propertySetterConfiguration -> {
+            Response propertySetter = restPropertySetterStore.createPropertySetter(propertySetterConfiguration);
+            checkIfCreatedResponse(propertySetter);
+            return propertySetter.getLocation();
         }).collect(Collectors.toList());
     }
 
@@ -274,8 +308,9 @@ public class RestImportService extends AbstractBackupService implements IRestImp
             throws RestInterfaceFactory.RestInterfaceFactoryException {
         IRestOutputStore restOutputStore = getRestResourceStore(IRestOutputStore.class);
         return outputConfigurations.stream().map(outputConfiguration -> {
-            Response dictionaryResponse = restOutputStore.createOutputSet(outputConfiguration);
-            return dictionaryResponse.getLocation();
+            Response outputResponse = restOutputStore.createOutputSet(outputConfiguration);
+            checkIfCreatedResponse(outputResponse);
+            return outputResponse.getLocation();
         }).collect(Collectors.toList());
     }
 
@@ -372,6 +407,13 @@ public class RestImportService extends AbstractBackupService implements IRestImp
             }
 
             return builder.toString();
+        }
+    }
+
+    private void checkIfCreatedResponse(Response response) {
+        int status = response.getStatus();
+        if (status != 201) {
+            log.error(String.format("Http Response Code was not 201 when attempting resource creation, but %s", status));
         }
     }
 

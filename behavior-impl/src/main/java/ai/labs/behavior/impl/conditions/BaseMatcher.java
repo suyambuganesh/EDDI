@@ -11,8 +11,11 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static ai.labs.behavior.impl.conditions.BaseMatcher.ConversationStepOccurrence.*;
-import static ai.labs.behavior.impl.conditions.IBehaviorCondition.ExecutionState.NOT_EXECUTED;
+import static ai.labs.behavior.impl.conditions.BaseMatcher.ConversationStepOccurrence.anyStep;
+import static ai.labs.behavior.impl.conditions.BaseMatcher.ConversationStepOccurrence.currentStep;
+import static ai.labs.behavior.impl.conditions.BaseMatcher.ConversationStepOccurrence.lastStep;
+import static ai.labs.behavior.impl.conditions.BaseMatcher.ConversationStepOccurrence.never;
+import static ai.labs.behavior.impl.conditions.BaseMatcher.ConversationStepOccurrence.values;
 import static ai.labs.behavior.impl.conditions.IBehaviorCondition.ExecutionState.SUCCESS;
 
 /**
@@ -28,18 +31,13 @@ public abstract class BaseMatcher implements IBehaviorCondition {
     protected ConversationStepOccurrence occurrence = currentStep;
 
     private final String conversationOccurrenceQualifier = KEY_OCCURRENCE;
-    protected ExecutionState state = NOT_EXECUTED;
+
 
     enum ConversationStepOccurrence {
         currentStep,
         lastStep,
         anyStep,
         never
-    }
-
-    @Override
-    public ExecutionState getExecutionState() {
-        return state;
     }
 
     @Override
@@ -76,7 +74,7 @@ public abstract class BaseMatcher implements IBehaviorCondition {
                             ". Needs to have one of the following configs: %s, actual value: '%s'.\n" +
                             "'currentStep' has been set as default now.";
                     errorMessage = String.format(errorMessage, Arrays.toString(values()), conversationOccurrence);
-                    log.error(errorMessage, new IllegalArgumentException(errorMessage));
+                    log.warn(errorMessage, new IllegalArgumentException(errorMessage));
             }
         }
     }

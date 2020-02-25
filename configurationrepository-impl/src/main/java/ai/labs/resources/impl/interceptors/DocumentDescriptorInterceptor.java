@@ -1,8 +1,7 @@
 package ai.labs.resources.impl.interceptors;
 
+import ai.labs.memory.IConversationMemoryStore;
 import ai.labs.memory.descriptor.IConversationDescriptorStore;
-import ai.labs.memory.descriptor.model.ConversationDescriptor;
-import ai.labs.models.DocumentDescriptor;
 import ai.labs.models.ResourceDescriptor;
 import ai.labs.persistence.IDescriptorStore;
 import ai.labs.persistence.IResourceStore;
@@ -17,9 +16,15 @@ import ai.labs.user.impl.utilities.UserUtilities;
 import ai.labs.utilities.RestUtilities;
 import ai.labs.utilities.SecurityUtilities;
 import lombok.extern.slf4j.Slf4j;
+import org.jboss.resteasy.plugins.guice.RequestScoped;
 
 import javax.inject.Inject;
-import javax.ws.rs.*;
+import javax.ws.rs.BadRequestException;
+import javax.ws.rs.DELETE;
+import javax.ws.rs.InternalServerErrorException;
+import javax.ws.rs.NotFoundException;
+import javax.ws.rs.POST;
+import javax.ws.rs.PUT;
 import javax.ws.rs.container.ContainerRequestContext;
 import javax.ws.rs.container.ContainerResponseContext;
 import javax.ws.rs.container.ContainerResponseFilter;
@@ -27,23 +32,26 @@ import javax.ws.rs.container.ResourceInfo;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.HttpHeaders;
 import javax.ws.rs.ext.Provider;
-import java.io.IOException;
 import java.lang.reflect.Method;
 import java.net.URI;
 import java.security.Principal;
 import java.util.Date;
+
+import static ai.labs.resources.impl.utilities.ResourceUtilities.createDocumentDescriptor;
 
 /**
  * @author ginccc
  */
 @Provider
 @Slf4j
+@RequestScoped
 public class DocumentDescriptorInterceptor implements ContainerResponseFilter {
     private static final String METHOD_NAME_UPDATE_DESCRIPTOR = "updateDescriptor";
     private static final String METHOD_NAME_UPDATE_PERMISSIONS = "updatePermissions";
     private final IDocumentDescriptorStore documentDescriptorStore;
     private final IConversationDescriptorStore conversationDescriptorStore;
     private final IUserStore userStore;
+    private final IConversationMemoryStore conversationMemoryStore;
     private final ITestCaseDescriptorStore testCaseDescriptorStore;
 
     @Inject
@@ -55,15 +63,21 @@ public class DocumentDescriptorInterceptor implements ContainerResponseFilter {
         this.userStore = injector.getInstance(IUserStore.class);
         this.documentDescriptorStore = injector.getInstance(IDocumentDescriptorStore.class);
         this.conversationDescriptorStore = injector.getInstance(IConversationDescriptorStore.class);
+        this.conversationMemoryStore = injector.getInstance(IConversationMemoryStore.class);
         this.testCaseDescriptorStore = injector.getInstance(ITestCaseDescriptorStore.class);
     }
 
     @Override
-    public void filter(ContainerRequestContext contextRequest, ContainerResponseContext contextResponse) throws IOException {
+    public void filter(ContainerRequestContext contextRequest, ContainerResponseContext contextResponse) {
         try {
             int httpStatus = contextResponse.getStatus();
+
+            if (httpStatus < 200 || httpStatus >= 300 || resourceInfo == null) {
+                return;
+            }
+
             Method resourceMethod = resourceInfo.getResourceMethod();
-            if (resourceMethod != null && (isPUT(resourceMethod) || isPATCH(resourceMethod) || isPOST(resourceMethod) || isDELETE(resourceMethod)) && httpStatus >= 200 && httpStatus < 300) {
+            if (resourceMethod != null && (isPUT(resourceMethod) || isPATCH(resourceMethod) || isPOST(resourceMethod) || isDELETE(resourceMethod))) {
                 String resourceLocationUri = contextResponse.getHeaderString(HttpHeaders.LOCATION);
                 if (resourceLocationUri != null) {
                     if (resourceLocationUri.contains("://")) {
@@ -77,10 +91,13 @@ public class DocumentDescriptorInterceptor implements ContainerResponseFilter {
                             if (httpStatus == 201) {
                                 if (resourceLocationUri.startsWith("eddi://ai.labs.testcases")) {
                                     testCaseDescriptorStore.createDescriptor(resourceId.getId(), resourceId.getVersion(), createTestCaseDescriptor(createdResourceURI, userURI));
-                                } else if (resourceLocationUri.startsWith("eddi://ai.labs.conversation")) {
-                                    conversationDescriptorStore.createDescriptor(resourceId.getId(), resourceId.getVersion(), createConversationDescriptor(createdResourceURI, userURI));
-                                } else if (isResourceIdValid(resourceId)) {
-                                    documentDescriptorStore.createDescriptor(resourceId.getId(), resourceId.getVersion(), createDocumentDescriptor(createdResourceURI, userURI));
+                                } else if (isResourceIdValid(resourceId) && !resourceLocationUri.startsWith("eddi://ai.labs.conversation")) {
+                                    try {
+                                        documentDescriptorStore.readDescriptor(resourceId.getId(), resourceId.getVersion());
+                                    } catch (IResourceStore.ResourceNotFoundException e) {
+                                        documentDescriptorStore.createDescriptor(resourceId.getId(), resourceId.getVersion(),
+                                                createDocumentDescriptor(createdResourceURI, userURI));
+                                    }
                                 }
                             }
 
@@ -146,33 +163,6 @@ public class DocumentDescriptorInterceptor implements ContainerResponseFilter {
         descriptor.setLastModifiedBy(author);
 
         return descriptor;
-    }
-
-    private static DocumentDescriptor createDocumentDescriptor(URI resource, URI author) {
-        Date current = new Date(System.currentTimeMillis());
-
-        DocumentDescriptor descriptor = new DocumentDescriptor();
-        descriptor.setResource(resource);
-        descriptor.setName("");
-        descriptor.setDescription("");
-        descriptor.setCreatedBy(author);
-        descriptor.setCreatedOn(current);
-        descriptor.setLastModifiedOn(current);
-        descriptor.setLastModifiedBy(author);
-
-        return descriptor;
-    }
-
-    private static ConversationDescriptor createConversationDescriptor(URI resource, URI user) {
-        ConversationDescriptor conversationDescriptor = new ConversationDescriptor();
-        conversationDescriptor.setResource(resource);
-        Date createdOn = new Date(System.currentTimeMillis());
-        conversationDescriptor.setCreatedOn(createdOn);
-        conversationDescriptor.setLastModifiedOn(createdOn);
-        conversationDescriptor.setCreatedBy(user);
-        conversationDescriptor.setLastModifiedBy(user);
-        conversationDescriptor.setViewState(ConversationDescriptor.ViewState.UNSEEN);
-        return conversationDescriptor;
     }
 
     private static URI createNewVersionOfResource(final URI resource, Integer version) {

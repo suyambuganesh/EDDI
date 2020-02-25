@@ -3,10 +3,7 @@ package ai.labs.staticresources.bootstrap;
 import ai.labs.runtime.bootstrap.AbstractBaseModule;
 import ai.labs.staticresources.impl.ResourceFileManager;
 import ai.labs.staticresources.rest.*;
-import ai.labs.staticresources.rest.impl.ContentTypeProvider;
-import ai.labs.staticresources.rest.impl.RestBinaryResource;
-import ai.labs.staticresources.rest.impl.RestHtmlApiResource;
-import ai.labs.staticresources.rest.impl.RestHtmlChatResource;
+import ai.labs.staticresources.rest.impl.*;
 import com.google.inject.Scopes;
 
 /**
@@ -18,8 +15,9 @@ public class StaticResourcesModule extends AbstractBaseModule {
         bind(IResourceFileManager.class).to(ResourceFileManager.class).in(Scopes.SINGLETON);
         bind(IContentTypeProvider.class).to(ContentTypeProvider.class).in(Scopes.SINGLETON);
 
-        bind(IRestHtmlApiResource.class).to(RestHtmlApiResource.class);
-        bind(IRestHtmlChatResource.class).to(RestHtmlChatResource.class);
-        bind(IRestBinaryResource.class).to(RestBinaryResource.class);
+        bind(IRestHtmlApiResource.class).to(RestHtmlApiResource.class).in(Scopes.SINGLETON);
+        bind(IRestHtmlChatResource.class).to(RestHtmlChatResource.class).in(Scopes.SINGLETON);
+        bind(IRestBinaryResource.class).to(RestBinaryResource.class).in(Scopes.SINGLETON);
+        bind(IRestOAuth2HtmlRedirect.class).to(RestOAuth2HtmlRedirect.class).in(Scopes.SINGLETON);
     }
 }

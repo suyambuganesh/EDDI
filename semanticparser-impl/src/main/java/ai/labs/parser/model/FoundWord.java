@@ -1,9 +1,9 @@
 package ai.labs.parser.model;
 
-import ai.labs.expressions.Expression;
+import ai.labs.expressions.Expressions;
 import ai.labs.parser.extensions.dictionaries.IDictionary;
 
-import java.util.List;
+import java.util.Objects;
 
 /**
  * @author ginccc
@@ -17,7 +17,7 @@ public class FoundWord extends FoundDictionaryEntry implements IDictionary.IFoun
         isWord = true;
     }
 
-    public FoundWord(String unknownValue, List<Expression> unknownExp) {
+    public FoundWord(String unknownValue, Expressions unknownExp) {
         super(unknownValue, unknownExp, false, 0.0);
         word = null;
         isWord = true;
@@ -36,7 +36,7 @@ public class FoundWord extends FoundDictionaryEntry implements IDictionary.IFoun
 
         FoundWord foundWord = (FoundWord) o;
 
-        return value != null ? value.equals(foundWord.value) : foundWord.value == null;
+        return Objects.equals(value, foundWord.value);
 
     }
 

@@ -1,8 +1,9 @@
 package ai.labs.behavior.impl;
 
+import ai.labs.behavior.impl.BehaviorGroup.ExecutionStrategy;
 import ai.labs.behavior.impl.conditions.IBehaviorCondition;
-import ai.labs.resources.rest.behavior.model.BehaviorConfiguration;
-import ai.labs.resources.rest.behavior.model.BehaviorRuleConditionConfiguration;
+import ai.labs.resources.rest.config.behavior.model.BehaviorConfiguration;
+import ai.labs.resources.rest.config.behavior.model.BehaviorRuleConditionConfiguration;
 import ai.labs.serialization.DeserializationException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -43,6 +44,15 @@ public class BehaviorDeserialization implements IBehaviorDeserialization {
                     groupConfiguration -> {
                         BehaviorGroup behaviorGroup = new BehaviorGroup();
                         behaviorGroup.setName(groupConfiguration.getName());
+                        ExecutionStrategy executionStrategy;
+                        String executionStrategyString = groupConfiguration.getExecutionStrategy();
+                        if (isNullOrEmpty(executionStrategyString)) {
+                            executionStrategy = ExecutionStrategy.executeUntilFirstSuccess;
+                        } else {
+                            executionStrategy = ExecutionStrategy.valueOf(executionStrategyString);
+                        }
+
+                        behaviorGroup.setExecutionStrategy(executionStrategy);
 
                         behaviorGroup.getBehaviorRules().addAll(groupConfiguration.getBehaviorRules().stream().map(
                                 behaviorRuleJson -> {
@@ -83,8 +93,8 @@ public class BehaviorDeserialization implements IBehaviorDeserialization {
                         }
                         var conditions = conditionConfiguration.getConditions();
                         if (!isNullOrEmpty(conditions)) {
-                            var convert = convert(conditions, behaviorSet);
-                            List<IBehaviorCondition> conditionsClone = deepCopy(convert);
+                            var behaviorConditions = convert(conditions, behaviorSet);
+                            List<IBehaviorCondition> conditionsClone = deepCopy(behaviorConditions);
                             condition.setConditions(conditionsClone);
                         }
                         condition.setContainingBehaviorRuleSet(behaviorSet);

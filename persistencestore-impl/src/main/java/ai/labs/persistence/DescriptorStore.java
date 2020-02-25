@@ -10,20 +10,24 @@ import ai.labs.utilities.RuntimeUtilities;
 import ai.labs.utilities.StringUtilities;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
+import com.mongodb.client.model.IndexOptions;
+import com.mongodb.client.model.Indexes;
 import org.bson.Document;
 
 import java.util.LinkedList;
 import java.util.List;
 
+import static ai.labs.persistence.IResourceStore.*;
+
 /**
  * @author ginccc
  */
 public class DescriptorStore<T> implements IDescriptorStore<T> {
-    private static final String COLLECTION_DESCRIPTORS = "descriptors";
+    protected static final String COLLECTION_DESCRIPTORS = "descriptors";
     private static final String FIELD_RESOURCE = "resource";
     private static final String FIELD_NAME = "name";
     private static final String FIELD_DESCRIPTION = "description";
-    private static final String FIELD_LAST_MODIFIED = "lastModifiedOn";
+    protected static final String FIELD_LAST_MODIFIED = "lastModifiedOn";
     private static final String FIELD_DELETED = "deleted";
 
     private static final String collectionName = "descriptors";
@@ -42,11 +46,13 @@ public class DescriptorStore<T> implements IDescriptorStore<T> {
         this.descriptorResourceStore = new ModifiableHistorizedResourceStore<>(resourceStorage);
         this.resourceFilter = new ResourceFilter<>(descriptorCollection, descriptorResourceStore,
                 permissionStore, userStore, groupStore, documentBuilder, documentType);
+
+        descriptorCollection.createIndex(Indexes.ascending(FIELD_RESOURCE), new IndexOptions().unique(true));
     }
 
     @Override
     public List<T> readDescriptors(String type, String filter, Integer index, Integer limit, boolean includeDeleted)
-            throws IResourceStore.ResourceStoreException, IResourceStore.ResourceNotFoundException {
+            throws ResourceStoreException, ResourceNotFoundException {
         List<IResourceFilter.QueryFilter> queryFiltersRequired = new LinkedList<>();
         String filterURI = "eddi://" + type + ".*";
         queryFiltersRequired.add(new IResourceFilter.QueryFilter(FIELD_RESOURCE, filterURI));
@@ -65,27 +71,33 @@ public class DescriptorStore<T> implements IDescriptorStore<T> {
     }
 
     @Override
-    public T readDescriptor(String resourceId, Integer version) throws IResourceStore.ResourceStoreException, IResourceStore.ResourceNotFoundException {
+    public T readDescriptor(String resourceId, Integer version) throws ResourceStoreException, ResourceNotFoundException {
         return descriptorResourceStore.read(resourceId, version);
     }
 
     @Override
-    public Integer updateDescriptor(String resourceId, Integer version, T documentDescriptor) throws IResourceStore.ResourceStoreException, IResourceStore.ResourceModifiedException, IResourceStore.ResourceNotFoundException {
+    public T readDescriptorWithHistory(String resourceId, Integer version) throws ResourceStoreException, ResourceNotFoundException {
+        return descriptorResourceStore.readIncludingDeleted(resourceId, version);
+    }
+
+
+    @Override
+    public Integer updateDescriptor(String resourceId, Integer version, T documentDescriptor) throws ResourceStoreException, ResourceModifiedException, ResourceNotFoundException {
         return descriptorResourceStore.update(resourceId, version, documentDescriptor);
     }
 
     @Override
-    public void setDescriptor(String resourceId, Integer version, T documentDescriptor) throws IResourceStore.ResourceStoreException, IResourceStore.ResourceNotFoundException {
+    public void setDescriptor(String resourceId, Integer version, T documentDescriptor) throws ResourceStoreException, ResourceNotFoundException {
         descriptorResourceStore.set(resourceId, version, documentDescriptor);
     }
 
     @Override
-    public void createDescriptor(String resourceId, Integer version, T documentDescriptor) throws IResourceStore.ResourceStoreException, IResourceStore.ResourceNotFoundException {
+    public void createDescriptor(String resourceId, Integer version, T documentDescriptor) throws ResourceStoreException {
         descriptorResourceStore.create(resourceId, version, documentDescriptor);
     }
 
     @Override
-    public void deleteDescriptor(String resourceId, Integer version) throws IResourceStore.ResourceStoreException, IResourceStore.ResourceNotFoundException, IResourceStore.ResourceModifiedException {
+    public void deleteDescriptor(String resourceId, Integer version) throws ResourceNotFoundException, ResourceModifiedException {
         descriptorResourceStore.delete(resourceId, version);
     }
 
@@ -95,7 +107,7 @@ public class DescriptorStore<T> implements IDescriptorStore<T> {
     }
 
 
-    public IResourceStore.IResourceId getCurrentResourceId(String id) throws IResourceStore.ResourceNotFoundException {
+    public IResourceId getCurrentResourceId(String id) throws ResourceNotFoundException {
         return descriptorResourceStore.getCurrentResourceId(id);
     }
 }

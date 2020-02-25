@@ -1,13 +1,13 @@
 package ai.labs.parser.extensions.dictionaries.providers;
 
-import ai.labs.expressions.Expression;
+import ai.labs.expressions.Expressions;
 import ai.labs.expressions.utilities.IExpressionProvider;
 import ai.labs.lifecycle.IllegalExtensionConfigurationException;
 import ai.labs.parser.extensions.dictionaries.IDictionary;
 import ai.labs.parser.extensions.dictionaries.RegularDictionary;
+import ai.labs.resources.rest.config.regulardictionary.model.RegularDictionaryConfiguration;
 import ai.labs.resources.rest.extensions.model.ExtensionDescriptor.ConfigValue;
 import ai.labs.resources.rest.extensions.model.ExtensionDescriptor.FieldType;
-import ai.labs.resources.rest.regulardictionary.model.RegularDictionaryConfiguration;
 import ai.labs.runtime.client.configuration.IResourceClientLibrary;
 import ai.labs.runtime.service.ServiceException;
 import ai.labs.utilities.RuntimeUtilities;
@@ -15,9 +15,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import javax.inject.Inject;
 import java.net.URI;
-import java.util.Collections;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -89,9 +87,19 @@ public class RegularDictionaryProvider implements IDictionaryProvider {
             String word = wordConfig.getWord();
             if (word != null) {
                 regularDictionary.addWord(word.trim(),
-                        createDefaultExpressionIfNull(word, wordConfig.getExp()), wordConfig.getFrequency());
+                        createDefaultExpressionIfNull(word, wordConfig.getExpressions()), wordConfig.getFrequency());
             } else {
                 log.warn("Value of 'word' in dictionary was null. Skipped it.");
+            }
+        });
+
+        regularDictionaryConfiguration.getRegExs().forEach(regExConfig -> {
+            String regEx = regExConfig.getRegEx();
+            if (regEx != null) {
+                regularDictionary.addRegex(regExConfig.getRegEx(),
+                        createDefaultExpressionIfNull(regExConfig.getRegEx(), regExConfig.getExpressions()));
+            } else {
+                log.warn("Value of 'regEx' in dictionary was null. Skipped it.");
             }
         });
 
@@ -99,16 +107,16 @@ public class RegularDictionaryProvider implements IDictionaryProvider {
             String phrase = phraseConfig.getPhrase();
             if (phrase != null) {
                 regularDictionary.addPhrase(phrase.trim(),
-                        createDefaultExpressionIfNull(phrase, phraseConfig.getExp()));
+                        createDefaultExpressionIfNull(phrase, phraseConfig.getExpressions()));
             } else {
                 log.warn("Value of 'phrase' in dictionary was null. Skipped it.");
             }
         });
     }
 
-    private List<Expression> createDefaultExpressionIfNull(String value, String exp) {
+    private Expressions createDefaultExpressionIfNull(String value, String exp) {
         if (RuntimeUtilities.isNullOrEmpty(exp)) {
-            return Collections.singletonList(expressionProvider.createExpression("unused", value));
+            return new Expressions(expressionProvider.createExpression("unused", value));
         }
 
         return expressionProvider.parseExpressions(exp);
