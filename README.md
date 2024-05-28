@@ -1,94 +1,129 @@
-# EDDI - Enhanced Dialog Driven Intelligence
+# E.D.D.I: Prompt & Conversation Management Middleware for Conversational AI APIs
 
-Scalable Open Source Chatbot Platform. Build multiple Chatbots with NLP, Behavior Rules, API Connector, Templating. 
+E.D.D.I (Enhanced Dialog Driven Interface) is a middleware to connect and manage LLM API bots 
+with advanced prompt and conversation management for APIs such as OpenAI ChatGPT, Facebook Hugging Face, 
+Anthropic Claude, Google Gemini and Ollama 
 
-v4.8.0 - IN DEVELOPMENT
+Developed in Java using Quarkus, it is lean, RESTful, scalable, and cloud-native. 
+It comes as Docker container and can be orchestrated with Kubernetes or Openshift.
+The Docker image has been certified by IBM/Red Hat.
 
-v4.7.1 - STABLE
+Latest stable version: 5.3.1
 
 License: Apache License 2.0
 
-Visit [here](https://eddi.labs.ai/) for further references about the project.
+Project website: [here](https://eddi.labs.ai/)
 
-For professional support, check out: [here](https://www.labs.ai/)
+Documentation: [here](https://docs.labs.ai/)
 
-Check out the full documentation [here](http://docs.labs.ai/).
+[![Codacy Badge](https://app.codacy.com/project/badge/Grade/2c5d183d4bd24dbaa77427cfbf5d4074)](https://app.codacy.com/organizations/gh/labsai/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=labsai/EDDI&amp;utm_campaign=Badge_Grade) [![CircleCI](https://circleci.com/gh/labsai/EDDI/tree/main.svg?style=svg)](https://circleci.com/gh/labsai/EDDI/tree/main)
 
-[![Codacy Badge](https://api.codacy.com/project/badge/Grade/17f0bf1c32b346fc9232e7601327d212)](https://app.codacy.com/app/ginccc/EDDI?utm_source=github.com&utm_medium=referral&utm_content=labsai/EDDI&utm_campaign=Badge_Grade_Dashboard)
-[![CircleCI](https://circleci.com/gh/labsai/EDDI/tree/master.svg?style=svg)](https://circleci.com/gh/labsai/EDDI/tree/master)
+![alt text](https://eddi.labs.ai/EDDI-landing-page-image.png)
 
-## Why choose E.D.D.I over other technologies
-### We have asked that question to our users and here are some reasons they mentioned
-* it is open source 💚
-* the configuration is extremely open and flexible
-* the code is self-explanatory and easy to extend
-* eddi is channel independent, therefore can be used anywhere
-* the (NLP) parser is extremely cool
-* the framework is focused and does not pretend to be the magic bullet that solves it all
-* great tech stack, when you want to build a chatbot product yourself
+## Overview
 
-## Intro
+E.D.D.I is a high performance middleware for managing conversations in AI-driven applications. 
+It is designed to run efficiently in cloud environments such as Docker, Kubernetes, and Openshift. 
+E.D.D.I offers seamless API integration capabilities, allowing easy connection with various conversational services or 
+traditional REST APIs with runtime configurations. 
+It supports the integration of multiple chatbots, even multiple versions of the same bot, for smooth upgrading and transitions.
 
-The Chatbot System - E.D.D.I (Enhanced Dialog Driven Intelligence), 
-has been developed with the focus on the use in enterprise applications as well as 
-the ease of connecting it to other resources (such as databases or other Services). 
+Notable features include:
 
-This platform has been developed for over many years and completely restructured from scratch four times 
-because of logical "dead ends" in the art of building chatbots - thus version 4.
+* Seamless integration with conversational or traditional REST APIs
+* Configurable NLP and Behavior rules to orchestrate LLM involvement
+* Support for multiple chatbots, including multiple versions of the same bot, running concurrently
+* Support for Major AI API integrations via langchain4j: OpenAI, Hugging Face (text only), Claude, Gemini, Ollama (and more to come)
 
-The most outstanding features are:
-* Flexible in NLP and Behavior
-* Fluently connect to REST APIs
-* Powerful Templating
-* Reuse Conversation Flows in multiple bots
+Technical specifications:
 
-technical spec:
-* Resource- / REST-oriented architecture
-* OAuth 2.0 / Basic Authentication
-* Java
+* Resource-/REST-oriented architecture
+* Java Quarkus framework
 * JAX-RS
 * Dependency Injection
-* Embedded Jetty
-* NoSQL
-* HTML, CSS, Javascript, JSON
+* Prometheus integration (Metrics endpoint)
+* Kubernetes integration (Liveness/Readiness endpoint)
+* MongoDB for storing bot configurations and conversation logs
+* OAuth 2.0 (Keycloak) for authentication and user management
+* HTML, CSS, Javascript (Dashboard)
+* React (Basic Chat UI)
 
-## Prerequirements
+## Prerequisites
 
-- Java 11
-- Maven 3
+* Java 21
+* Maven 3.8.4
+* MongoDB >= 5.0
 
-## Build project with maven
-Go to the root directory and execute
+## How to run the project
 
-    mvn clean install
+1. Setup a local mongodb \(&gt; v5.0\)
+2. On a terminal, under project root folder, run the following command:
 
-## Start Servers
-1. Setup a local mongodb (> v3.0)
-2. launch with VM options 
-   ```
-    -DEDDI_ENV=[development/production] -Duser.dir=[LOCAL_PATH_TO_EDDI]\apiserver ai.labs.api.ApiServer
-   ```
-3. Go to Browser --> http://localhost:7070
+```shell script
+./mvnw compile quarkus:dev
+```
 
-Note: If running locally inside an IDE you need *lombok* to be enabled (otherwise you will get compile errors complaining about missing constructors). Either download as plugin (e.g. inside Intellij) or follow instructions here https://projectlombok.org/
+3. Go to Browser --&gt; [http://localhost:7070](http://localhost:7070)
 
-## Docker
+Note: If running locally inside an IDE you need _lombok_ to be enabled \(otherwise you will get compile errors
+complaining about missing constructors\). Either download as plugin \(e.g. inside Intellij\) or follow instructions
+here [https://projectlombok.org/](https://projectlombok.org/
+
+## Build App & Docker image
+
+```bash
+./mvnw clean package '-Dquarkus.container-image.build=true'
+```
+
+## Download from Docker hub registry
+
+```bash
+docker pull labsai/eddi
+```
+
+[https://hub.docker.com/r/labsai/eddi](https://hub.docker.com/r/labsai/eddi)
+
+## Run Docker image
+
+For production, launch standalone mongodb and then start an eddi instance as defined in the docker-compose file
+
+```bash
+docker-compose up
+```
 
 For development, use
 
-```
+```bash
 docker-compose -f docker-compose.yml -f docker-compose.local.yml up
 ```
 
-after running `mvn package`. This builds a local image of EDDI.
+For integration testing run
 
-For integration testing run 
-```
+```bash
 ./integration-tests.sh
 ```
+
 or
-```
+
+```bash
 docker-compose -f docker-compose.yml -f docker-compose.local.yml -f docker-compose.testing.yml -p ci up -d
 ```
 
-For running in cloud (with authentication), check: https://hub.docker.com/r/labsai/eddi
+## prometheus/metrics integration
+
+
+```bash
+<eddi-instance>/q/metrics
+```
+
+## kubernetes integration
+
+Liveness endpoint:
+```bash
+<eddi-instance>/q/health/live
+```
+
+Readiness endpoint:
+```bash
+<eddi-instance>/q/health/ready
+```
