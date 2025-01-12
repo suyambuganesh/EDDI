@@ -72,9 +72,8 @@ class LangchainTaskTest {
                                 "apiKey", "<apiKey>",
                                 "addToOutput", "true"
                         ),
-                        "Processed template content",
                         List.of(new TextOutputItem(TEST_MESSAGE_FROM_LLM, 0)),
-                        1, // times for templatingEngine.processTemplate
+                        4, // times for templatingEngine.processTemplate
                         2, // times for currentStep.storeData
                         1  // times for currentStep.addConversationOutputList
                 ),
@@ -84,9 +83,8 @@ class LangchainTaskTest {
                                 "logSizeLimit", "10",
                                 "apiKey", "<apiKey1>"
                         ),
-                        "Another template content",
                         List.of(new TextOutputItem(TEST_MESSAGE_FROM_LLM, 0)),
-                        1, // times for templatingEngine.processTemplate
+                        3, // times for templatingEngine.processTemplate
                         1, // times for currentStep.storeData
                         0  // times for currentStep.addConversationOutputList
                 )
@@ -96,7 +94,7 @@ class LangchainTaskTest {
 
     @ParameterizedTest
     @MethodSource("provideParameters")
-    void execute(Map<String, String> parameters, String processedTemplate, List<TextOutputItem> expectedOutput,
+    void execute(Map<String, String> parameters, List<TextOutputItem> expectedOutput,
                  int timesTemplate, int timesStoreData, int timesAddOutputList) throws Exception {
         // Setup
         IConversationMemory memory = mock(IConversationMemory.class);
@@ -120,7 +118,20 @@ class LangchainTaskTest {
         IData outputData = mock(IData.class);
         when(dataFactory.createData(anyString(), any())).thenReturn(outputData);
 
-        when(templatingEngine.processTemplate(anyString(), anyMap())).thenReturn("Processed template content");
+        // Adding debug statements
+        System.out.println("Setting up mocks with parameters:");
+        parameters.forEach((key, value) -> System.out.println(key + ": " + value));
+
+        var systemMessage = parameters.getOrDefault("systemMessage", "-1");
+        var apiKey = parameters.getOrDefault("apiKey", "-1");
+        var logSizeLimit = parameters.getOrDefault("logSizeLimit", "-1");
+        var addToOutput = parameters.getOrDefault("addToOutput", "false");
+        var convertToObject = parameters.getOrDefault("convertToObject", "false");
+        when(templatingEngine.processTemplate(eq(systemMessage), anyMap())).thenReturn(systemMessage);
+        when(templatingEngine.processTemplate(eq(apiKey), anyMap())).thenReturn(apiKey);
+        when(templatingEngine.processTemplate(eq(logSizeLimit), anyMap())).thenReturn(logSizeLimit);
+        when(templatingEngine.processTemplate(eq(addToOutput), anyMap())).thenReturn(addToOutput);
+        when(templatingEngine.processTemplate(eq(convertToObject), anyMap())).thenReturn(convertToObject);
 
         // Test
         langChainTask.execute(memory, langChainConfig);
@@ -133,9 +144,8 @@ class LangchainTaskTest {
         verify(currentStep, times(timesStoreData)).storeData(any(IData.class));
 
         // Verify that the conversation output string was updated
-        var expectedOutputItem = List.of(new TextOutputItem(TEST_MESSAGE_FROM_LLM, 0));
         verify(currentStep, times(timesAddOutputList)).
-                addConversationOutputList(eq(LangchainTask.MEMORY_OUTPUT_IDENTIFIER), eq(expectedOutputItem));
+                addConversationOutputList(eq(LangchainTask.MEMORY_OUTPUT_IDENTIFIER), eq(expectedOutput));
     }
 
 
