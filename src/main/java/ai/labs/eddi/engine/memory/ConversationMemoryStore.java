@@ -19,6 +19,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.stream.Collectors;
 
 import static ai.labs.eddi.engine.model.Context.ContextType.valueOf;
 import static ai.labs.eddi.engine.model.ConversationState.ENDED;
@@ -148,6 +149,13 @@ public class ConversationMemoryStore implements IConversationMemoryStore, IResou
         Bson query = Filters.and(Filters.eq(KEY_BOT_ID, botId), Filters.eq(KEY_BOT_VERSION, botVersion),
                 Filters.not(new Document(KEY_CONVERSATION_STATE, ENDED.toString())));
         return Observable.fromPublisher(conversationCollectionDocument.countDocuments(query)).blockingFirst();
+    }
+
+    @Override
+    public List<String> getEndedConversationIds() {
+        return Observable.fromPublisher(
+                conversationCollectionDocument.find(Filters.eq(KEY_CONVERSATION_STATE, ENDED.toString()))
+        ).blockingStream().map(document -> document.get(OBJECT_ID).toString()).collect(Collectors.toList());
     }
 
     @Override

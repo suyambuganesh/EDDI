@@ -17,7 +17,7 @@ import ai.labs.eddi.modules.langchain.model.LangChainConfiguration;
 import ai.labs.eddi.modules.output.model.types.TextOutputItem;
 import ai.labs.eddi.modules.templating.ITemplatingEngine;
 import dev.langchain4j.data.message.*;
-import dev.langchain4j.model.chat.ChatLanguageModel;
+import dev.langchain4j.model.chat.ChatModel;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
@@ -47,6 +47,7 @@ public class LangchainTask implements ILifecycleTask {
     private static final String KEY_INCLUDE_FIRST_BOT_MESSAGE = "includeFirstBotMessage";
     private static final String KEY_CONVERT_TO_OBJECT = "convertToObject";
     private static final String KEY_ADD_TO_OUTPUT = "addToOutput";
+    private static final String MATCH_ALL_OPERATOR = "*";
 
     static final String MEMORY_OUTPUT_IDENTIFIER = "output";
     static final String LANGCHAIN_OUTPUT_IDENTIFIER = MEMORY_OUTPUT_IDENTIFIER + ":text:langchain";
@@ -59,7 +60,7 @@ public class LangchainTask implements ILifecycleTask {
     private final PrePostUtils prePostUtils;
     private final Map<String, Provider<ILanguageModelBuilder>> languageModelApiConnectorBuilders;
 
-    private final Map<ModelCacheKey, ChatLanguageModel> modelCache = new ConcurrentHashMap<>(1);
+    private final Map<ModelCacheKey, ChatModel> modelCache = new ConcurrentHashMap<>(1);
 
     private static final Logger LOGGER = Logger.getLogger(LangchainTask.class);
 
@@ -108,7 +109,8 @@ public class LangchainTask implements ILifecycleTask {
             }
 
             for (var task : langChainConfig.tasks()) {
-                if (task.actions().stream().anyMatch(actions::contains)) {
+                if (task.actions().contains(MATCH_ALL_OPERATOR) ||
+                        task.actions().stream().anyMatch(actions::contains)) {
                     var processedParams = runTemplateEngineOnParams(task.parameters(), templateDataObjects);
                     var messages = new LinkedList<ChatMessage>();
 
@@ -147,9 +149,9 @@ public class LangchainTask implements ILifecycleTask {
                     if (messages.isEmpty()) {
                         continue;
                     }
-                    var chatLanguageModel = getChatLanguageModel(task.type(), filterParams(processedParams));
+                    var ChatModel = getChatModel(task.type(), filterParams(processedParams));
                     prePostUtils.executePreRequestPropertyInstructions(memory, templateDataObjects, task.preRequest());
-                    var messageResponse = chatLanguageModel.chat(messages);
+                    var messageResponse = ChatModel.chat(messages);
                     var responseContent = messageResponse.aiMessage().text();
                     var responseMetadata = messageResponse.metadata();
 
@@ -221,7 +223,7 @@ public class LangchainTask implements ILifecycleTask {
         return returnMap;
     }
 
-    private ChatLanguageModel getChatLanguageModel(String type, Map<String, String> parameters)
+    private ChatModel getChatModel(String type, Map<String, String> parameters)
             throws UnsupportedLangchainTaskException {
 
         var cacheKey = new ModelCacheKey(type, parameters);
